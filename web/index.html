@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HWDATA — CPU / GPU 硬件参数库</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">HW</span>
+    <div class="brand-txt">
+      <strong>HWDATA</strong>
+      <em>硬件参数库</em>
+    </div>
+  </div>
+
+  <nav class="seg" id="seg" role="tablist">
+    <span class="seg-thumb" id="segThumb"></span>
+    <button class="seg-btn" data-kind="cpu" role="tab">处理器<span class="seg-n" id="segCpuN"></span></button>
+    <button class="seg-btn" data-kind="gpu" role="tab">显卡<span class="seg-n" id="segGpuN"></span></button>
+  </nav>
+
+  <div class="search">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="6"/><path d="M13.5 13.5 18 18"/></svg>
+    <input id="q" type="search" placeholder="搜索型号、代号、插槽…" autocomplete="off" spellcheck="false">
+    <kbd>/</kbd>
+  </div>
+
+  <button class="icon-btn" id="resetBtn" title="清空筛选">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10a6 6 0 1 1 2 4.5"/><path d="M4 15v-4h4"/></svg>
+  </button>
+  <button class="icon-btn" id="themeBtn" title="切换主题">
+    <svg viewBox="0 0 20 20" class="ic-moon"><path d="M16 12.5A6.5 6.5 0 0 1 7.5 4a6.5 6.5 0 1 0 8.5 8.5Z"/></svg>
+    <svg viewBox="0 0 20 20" class="ic-sun"><circle cx="10" cy="10" r="3.6"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.3 4.3l1.5 1.5M14.2 14.2l1.5 1.5M15.7 4.3l-1.5 1.5M5.8 14.2l-1.5 1.5"/></svg>
+  </button>
+</header>
+
+<div class="layout">
+  <aside class="side">
+    <div class="side-head">
+      <span>筛选条件</span>
+      <button class="link" id="clearFilters">重置</button>
+    </div>
+    <div id="filterPanel" class="side-body"></div>
+  </aside>
+
+  <main class="main">
+    <div class="toolbar">
+      <div class="counts">
+        <span class="cnt" id="cntShown">—</span>
+        <span class="cnt-sep">/</span>
+        <span class="cnt-total" id="cntTotal">—</span>
+        <span class="cnt-unit">款</span>
+      </div>
+      <div class="chips" id="activeChips"></div>
+      <div class="toolbar-right">
+        <label class="pagesize">
+          每页
+          <select id="pageSize">
+            <option>25</option>
+            <option selected>50</option>
+            <option>100</option>
+            <option>200</option>
+            <option>500</option>
+          </select>
+          条
+        </label>
+      </div>
+    </div>
+
+    <div class="tablewrap" id="tablewrap">
+      <table class="grid" id="grid">
+        <thead id="thead"></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="empty" id="empty" hidden>没有符合条件的记录</div>
+    </div>
+
+    <div class="pager" id="pager"></div>
+  </main>
+</div>
+
+<div class="tray" id="tray" hidden>
+  <div class="tray-items" id="trayItems"></div>
+  <div class="tray-actions">
+    <button class="btn ghost" id="trayClear">清空</button>
+    <button class="btn solid" id="trayGo">开始对比</button>
+  </div>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="cmp" role="dialog" aria-modal="true">
+    <header class="cmp-head">
+      <div>
+        <h2>参数对比</h2>
+        <p id="cmpSub"></p>
+      </div>
+      <button class="icon-btn" id="cmpClose" title="关闭 (Esc)">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15"/></svg>
+      </button>
+    </header>
+    <div class="cmp-body" id="cmpBody"></div>
+  </div>
+</div>
+
+<div class="boot" id="boot">正在载入数据…</div>
+
+<script src="data/cpu.js"></script>
+<script src="data/gpu.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

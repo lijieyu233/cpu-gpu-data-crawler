@@ -5,3 +5,6 @@ __pycache__/
 
 # JSON 体积大（含完整字段冗余），仅保留 CSV 交付物
 out/*.json
+
+# 可视化界面的离线数据（由 web/build_data.py 生成）
+web/data/

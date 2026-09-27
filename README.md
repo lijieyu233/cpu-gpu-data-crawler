@@ -47,6 +47,16 @@ python crawl.py --no-cache     # 忽略缓存重新抓取
 - GPU 列表页不提供 TDP、制程、加速频率，因此这些字段未纳入 GPU 输出。
 - 核显的显存为 `System Shared`，容量字段留空。
 
+## 可视化界面
+
+`web/` 是一个纯静态的参数浏览页，支持按任意列排序、多条件筛选、分页，以及最多 4 个型号的横向参数对比（自动标出每项最优值并给出跑分条形图）。
+
+```bash
+python web/build_data.py      # 把 out/*.json 精简后转成 web/data/*.js
+```
+
+浏览器打开 `file://` 时无法 fetch 本地 JSON，所以这里把数据打包成可直接 `<script>` 加载的 JS 文件。生成后直接双击 `web/index.html` 即可使用；数据更新后重新执行一次即可。
+
 ## 结构
 
 ```
@@ -54,4 +64,5 @@ common.py     HTTP 抓取（限速/重试/缓存）、型号名归一化、数�
 tpu.py        TechPowerUp 列表采集与字段整理
 passmark.py   PassMark 各榜单采集与合并
 crawl.py      调度入口：抓取 → 合并 → 导出
+web/          纯静态浏览界面（index.html / style.css / app.js）+ 数据打包脚本
 ```
