@@ -238,6 +238,8 @@
   }
 
   const $ = (id) => document.getElementById(id);
+  // HTML 与 JS 版本不一致时节点可能缺失，绑定前判空，避免初始化中断
+  const on = (el, ev, fn) => { if (el) el.addEventListener(ev, fn); };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   const BRAND_COLOR = { amd: '#d9363e', nvidia: '#699c00', intel: '#0a6cb4', apple: '#6b7280' };
@@ -537,8 +539,10 @@
   /* ── 渲染：字段面板（显隐 + 顺序） ──────────────────────── */
 
   function updateFieldsCount() {
+    const el = $('fieldsCount');
+    if (!el) return;
     const total = CFG[state.kind].columns.length;
-    $('fieldsCount').textContent = `${total - state.hidden[state.kind].length}/${total}`;
+    el.textContent = `${total - state.hidden[state.kind].length}/${total}`;
   }
 
   function fieldItems(kind) {
@@ -546,11 +550,13 @@
   }
 
   function renderFields() {
+    const pop = $('fieldPop');
+    if (!pop) return;
     const kind = state.kind;
     const defs = new Map(CFG[kind].columns.map((d) => [d.k, d]));
     const hidden = state.hidden[kind];
 
-    $('fieldPop').innerHTML =
+    pop.innerHTML =
       `<div class="fp-head"><span>显示字段<em>拖拽调整顺序</em></span>
          <button class="link" id="fpReset">恢复默认</button></div>
        <ul class="fp-list">` +
@@ -573,9 +579,11 @@
 
   function toggleFields(force) {
     const pop = $('fieldPop');
+    if (!pop) return;
     const open = force === undefined ? pop.hidden : force;
     pop.hidden = !open;
-    $('fieldsBtn').setAttribute('aria-expanded', String(open));
+    const btn = $('fieldsBtn');
+    if (btn) btn.setAttribute('aria-expanded', String(open));
     if (open) renderFields();
   }
 
@@ -596,16 +604,16 @@
 
   let dragKey = null;
 
-  $('fieldsBtn').addEventListener('click', (e) => {
+  on($('fieldsBtn'), 'click', (e) => {
     e.stopPropagation();
     toggleFields();
   });
 
-  $('fieldPop').addEventListener('click', (e) => {
+  on($('fieldPop'), 'click', (e) => {
     if (e.target.closest('#fpReset')) resetFields();
   });
 
-  $('fieldPop').addEventListener('change', (e) => {
+  on($('fieldPop'), 'change', (e) => {
     const cb = e.target.closest('[data-fk]');
     if (!cb || cb.dataset.fk === LOCKED) return;
     const k = cb.dataset.fk;
@@ -618,9 +626,9 @@
     refreshTable();
   });
 
-  const fpItems = () => $('fieldPop').querySelectorAll('.fp-item');
+  const fpItems = () => { const pop = $('fieldPop'); return pop ? pop.querySelectorAll('.fp-item') : []; };
 
-  $('fieldPop').addEventListener('dragstart', (e) => {
+  on($('fieldPop'), 'dragstart', (e) => {
     const li = e.target.closest('.fp-item');
     if (!li || li.classList.contains('locked')) { e.preventDefault(); return; }
     dragKey = li.dataset.k;
@@ -629,7 +637,7 @@
     try { e.dataTransfer.setData('text/plain', dragKey); } catch (_) {}
   });
 
-  $('fieldPop').addEventListener('dragover', (e) => {
+  on($('fieldPop'), 'dragover', (e) => {
     if (!dragKey) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -638,7 +646,7 @@
     if (li && li.dataset.k !== dragKey && !li.classList.contains('locked')) li.classList.add('over');
   });
 
-  $('fieldPop').addEventListener('drop', (e) => {
+  on($('fieldPop'), 'drop', (e) => {
     if (!dragKey) return;
     e.preventDefault();
     const li = e.target.closest('.fp-item');
@@ -659,14 +667,15 @@
     refreshTable();
   });
 
-  $('fieldPop').addEventListener('dragend', () => {
+  on($('fieldPop'), 'dragend', () => {
     dragKey = null;
     fpItems().forEach((n) => n.classList.remove('dragging', 'over'));
   });
 
   // 点击面板外关闭
   document.addEventListener('click', (e) => {
-    if ($('fieldPop').hidden) return;
+    const pop = $('fieldPop');
+    if (!pop || pop.hidden) return;
     if (e.target.closest('#fieldPop') || e.target.closest('#fieldsBtn')) return;
     toggleFields(false);
   });
@@ -754,7 +763,8 @@
     renderSeg();
     renderTray();
     renderFilters();
-    if (!$('fieldPop').hidden) renderFields(); else updateFieldsCount();
+    const fp = $('fieldPop');
+    if (fp && !fp.hidden) renderFields(); else updateFieldsCount();
   }
 
   /* ── 交互 ───────────────────────────────────────────────── */
@@ -972,7 +982,8 @@
   // 键盘
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      if (!$('fieldPop').hidden) toggleFields(false);
+      const fp = $('fieldPop');
+      if (fp && !fp.hidden) toggleFields(false);
       else if (!$('overlay').hidden) closeCompare();
       else if (document.activeElement && document.activeElement.tagName === 'INPUT') document.activeElement.blur();
       return;
