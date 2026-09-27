@@ -1,0 +1,7 @@
+# 缓存与中间产物
+.cache/
+__pycache__/
+*.pyc
+
+# JSON 体积大（含完整字段冗余），仅保留 CSV 交付物
+out/*.json
