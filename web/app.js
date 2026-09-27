@@ -11,6 +11,7 @@
   const CFG = {
     cpu: {
       primary: 'passmark_cpu_mark',
+      base: { model: 'Ryzen 5 5600', t: 'vs 5600' },
       columns: [
         { k: 'model', t: '型号', type: 'name', sticky: true, w: '234px' },
         { k: 'brand', t: '品牌', type: 'brand', w: '84px' },
@@ -25,6 +26,7 @@
         { k: 'tdp_w', t: 'TDP', u: 'W', type: 'int', num: true, w: '68px' },
         { k: 'released_date', d: 'released', t: '发布', type: 'text', w: '110px' },
         { k: 'passmark_cpu_mark', t: 'PassMark', type: 'mark', num: true, w: '118px' },
+        { k: 'vs_ratio', t: 'vs 5600', type: 'vs', num: true, w: '84px' },
         { k: 'passmark_single_thread', t: '单线程', type: 'mark', num: true, w: '94px' },
         { k: 'passmark_rank', t: '排名', type: 'rank', num: true, w: '68px' },
         { k: 'price_usd', t: '参考价', type: 'usd', num: true, w: '84px' },
@@ -60,6 +62,7 @@
     },
     gpu: {
       primary: 'passmark_g3d_mark',
+      base: { model: 'GeForce RTX 5060', t: 'vs RTX 5060' },
       columns: [
         { k: 'model', t: '型号', type: 'name', sticky: true, w: '238px' },
         { k: 'brand', t: '品牌', type: 'brand', w: '84px' },
@@ -75,6 +78,7 @@
         { k: 'rops', t: 'ROP', type: 'int', num: true, w: '68px' },
         { k: 'released_date', d: 'released', t: '发布', type: 'text', w: '110px' },
         { k: 'passmark_g3d_mark', t: 'G3D Mark', type: 'mark', num: true, w: '118px' },
+        { k: 'vs_ratio', t: 'vs RTX 5060', type: 'vs', num: true, w: '106px' },
         { k: 'passmark_rank', t: '排名', type: 'rank', num: true, w: '68px' },
         { k: 'price_usd', t: '参考价', type: 'usd', num: true, w: '84px' },
       ],
@@ -113,19 +117,34 @@
 
   const DATA = { cpu: [], gpu: [] };
   const MAXMARK = { cpu: 0, gpu: 0 };
+  const BASE = { cpu: null, gpu: null };
 
   function prepare() {
     for (const kind of KINDS) {
       const src = (window.HWDATA && window.HWDATA[kind]) || [];
-      DATA[kind] = src.map((raw, i) => {
+      const mark = CFG[kind].primary;
+      const rows = src.map((raw, i) => {
         const r = Object.assign({}, raw);
         r.__id = kind + ':' + i;
         const y = /^(\d{4})/.exec(r.released_date || '');
         r.year = y ? Number(y[1]) : null;
-        r.haspm = r[CFG[kind].primary] != null;
+        r.haspm = r[mark] != null;
         return r;
       });
-      MAXMARK[kind] = DATA[kind].reduce((m, r) => Math.max(m, Number(r[CFG[kind].primary]) || 0), 0);
+
+      // 基准型号的跑分，用于计算 vs_ratio
+      const base = CFG[kind].base;
+      const ref = base ? rows.find((r) => r.model === base.model && Number(r[mark]) > 0) : null;
+      BASE[kind] = ref ? Number(ref[mark]) : null;
+      if (BASE[kind]) {
+        for (const r of rows) {
+          const v = Number(r[mark]);
+          r.vs_ratio = Number.isFinite(v) && v > 0 ? (v / BASE[kind]) * 100 : null;
+        }
+      }
+
+      DATA[kind] = rows;
+      MAXMARK[kind] = rows.reduce((m, r) => Math.max(m, Number(r[mark]) || 0), 0);
     }
   }
 
@@ -142,6 +161,8 @@
       gpu: { k: CFG.gpu.primary, dir: -1 },
     },
     filters: { cpu: {}, gpu: {} },
+    cols: { cpu: [], gpu: [] },     // 字段顺序（含被隐藏的）
+    hidden: { cpu: [], gpu: [] },   // 被隐藏的字段
   };
 
   for (const kind of KINDS) {
@@ -150,6 +171,70 @@
       bag[d.k] = d.type === 'multi' ? [] : d.type === 'range' ? { min: '', max: '' } : false;
     }
     state.filters[kind] = bag;
+  }
+
+  /* ── 字段顺序 / 显隐（持久化到 localStorage） ───────────── */
+
+  const LS_COLS = 'hwdata-cols-v1';
+  const LOCKED = 'model';   // 型号列固定在最左，不可隐藏、不可拖动
+
+  function defaultCols(kind) {
+    return CFG[kind].columns.map((d) => d.k);
+  }
+
+  function loadCols() {
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(LS_COLS) || 'null'); } catch (_) { saved = null; }
+    for (const kind of KINDS) {
+      const all = defaultCols(kind);
+      let order = all.slice();
+      let hidden = [];
+      const s = saved && saved[kind];
+      if (s) {
+        if (Array.isArray(s.order)) {
+          const valid = s.order.filter((k) => all.indexOf(k) >= 0);
+          for (const k of all) if (valid.indexOf(k) < 0) valid.push(k);   // 补齐新增字段
+          order = valid;
+        }
+        if (Array.isArray(s.hidden)) hidden = s.hidden.filter((k) => k !== LOCKED && all.indexOf(k) >= 0);
+      }
+      state.cols[kind] = order;
+      state.hidden[kind] = hidden;
+    }
+  }
+
+  function saveCols() {
+    try {
+      localStorage.setItem(LS_COLS, JSON.stringify({
+        cpu: { order: state.cols.cpu, hidden: state.hidden.cpu },
+        gpu: { order: state.cols.gpu, hidden: state.hidden.gpu },
+      }));
+    } catch (_) { /* 隐私模式下忽略 */ }
+  }
+
+  /* 按用户顺序返回可见列定义 */
+  function colsOf(kind) {
+    const defs = CFG[kind].columns;
+    const byKey = new Map(defs.map((d) => [d.k, d]));
+    const hidden = state.hidden[kind];
+    const out = [];
+    const seen = new Set();
+
+    // 型号列永远第一
+    if (byKey.has(LOCKED)) { out.push(byKey.get(LOCKED)); seen.add(LOCKED); }
+
+    for (const k of state.cols[kind]) {
+      if (k === LOCKED || seen.has(k)) continue;
+      const d = byKey.get(k);
+      if (!d) continue;
+      seen.add(k);
+      if (hidden.indexOf(k) < 0) out.push(d);
+    }
+    for (const d of defs) {                       // 兜底：新增但未记录进 order 的列
+      if (seen.has(d.k) || hidden.indexOf(d.k) >= 0) continue;
+      out.push(d);
+    }
+    return out;
   }
 
   const $ = (id) => document.getElementById(id);
@@ -176,6 +261,11 @@
       case 'rank': return `<span class="rank${Number(v) <= 100 ? ' top' : ''}">#${nf.format(v)}</span>`;
       case 'dec': return String(Math.round(Number(v) * 1000) / 1000);
       case 'usd': return '$' + nf.format(Math.round(Number(v)));
+      case 'vs': {
+        const n = Number(v);
+        const txt = String(Math.round(n * 10) / 10).replace(/\.0$/, '');
+        return `<span class="vs ${n >= 100 ? 'up' : 'down'}">${txt}%</span>`;
+      }
       default: return esc(v);
     }
   }
@@ -346,18 +436,22 @@
   function renderHead() {
     const kind = state.kind;
     const sort = state.sort[kind];
-    $('thead').innerHTML = '<tr>' + CFG[kind].columns.map((c) => {
+    const ref = BASE[kind];
+    $('thead').innerHTML = '<tr>' + colsOf(kind).map((c) => {
       const sorted = sort && sort.k === c.k;
       const cls = [c.num ? 'num' : '', c.sticky ? 'sticky' : '', sorted ? 'sorted' : '', sorted && sort.dir === 1 ? 'asc' : '']
         .filter(Boolean).join(' ');
-      return `<th class="${cls}" data-k="${c.k}" style="min-width:${c.w}" title="点击排序">
+      const title = c.type === 'vs' && ref
+        ? `以 ${CFG[kind].base.model}（${nf.format(ref)}）跑分为 100% · 点击排序`
+        : '点击排序';
+      return `<th class="${cls}" data-k="${c.k}" style="min-width:${c.w}" title="${esc(title)}">
         ${esc(c.t)}${c.u ? `<span class="u">${c.u}</span>` : ''}<span class="caret"></span></th>`;
     }).join('') + '</tr>';
   }
 
   function renderBody(list) {
     const kind = state.kind;
-    const cols = CFG[kind].columns;
+    const cols = colsOf(kind);
     const sel = state.sel[kind];
     const pages = Math.max(1, Math.ceil(list.length / state.pageSize));
     const page = Math.min(state.page[kind], pages);
@@ -439,6 +533,143 @@
     $('trayGo').disabled = recs.length < 2;
     $('trayGo').textContent = recs.length < 2 ? '再选 1 款对比' : `开始对比 (${recs.length})`;
   }
+
+  /* ── 渲染：字段面板（显隐 + 顺序） ──────────────────────── */
+
+  function updateFieldsCount() {
+    const total = CFG[state.kind].columns.length;
+    $('fieldsCount').textContent = `${total - state.hidden[state.kind].length}/${total}`;
+  }
+
+  function fieldItems(kind) {
+    return [LOCKED].concat(state.cols[kind].filter((k) => k !== LOCKED));
+  }
+
+  function renderFields() {
+    const kind = state.kind;
+    const defs = new Map(CFG[kind].columns.map((d) => [d.k, d]));
+    const hidden = state.hidden[kind];
+
+    $('fieldPop').innerHTML =
+      `<div class="fp-head"><span>显示字段<em>拖拽调整顺序</em></span>
+         <button class="link" id="fpReset">恢复默认</button></div>
+       <ul class="fp-list">` +
+      fieldItems(kind).map((k) => {
+        const d = defs.get(k);
+        if (!d) return '';
+        const locked = k === LOCKED;
+        const on = locked || hidden.indexOf(k) < 0;
+        return `<li class="fp-item${on ? '' : ' off'}${locked ? ' locked' : ''}" data-k="${k}" draggable="${!locked}">
+          <span class="fp-handle">${locked ? '·' : '⠿'}</span>
+          <input type="checkbox" data-fk="${k}"${on ? ' checked' : ''}${locked ? ' disabled' : ''}>
+          <span class="fp-name">${esc(d.t)}${d.u ? `<i>${d.u}</i>` : ''}</span>
+        </li>`;
+      }).join('') +
+      `</ul>
+       <div class="fp-foot">型号列固定在最左，不可隐藏</div>`;
+
+    updateFieldsCount();
+  }
+
+  function toggleFields(force) {
+    const pop = $('fieldPop');
+    const open = force === undefined ? pop.hidden : force;
+    pop.hidden = !open;
+    $('fieldsBtn').setAttribute('aria-expanded', String(open));
+    if (open) renderFields();
+  }
+
+  function refreshTable() {
+    renderHead();
+    renderBody(computed());
+    updateFieldsCount();
+  }
+
+  function resetFields() {
+    const kind = state.kind;
+    state.cols[kind] = defaultCols(kind);
+    state.hidden[kind] = [];
+    saveCols();
+    renderFields();
+    refreshTable();
+  }
+
+  let dragKey = null;
+
+  $('fieldsBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleFields();
+  });
+
+  $('fieldPop').addEventListener('click', (e) => {
+    if (e.target.closest('#fpReset')) resetFields();
+  });
+
+  $('fieldPop').addEventListener('change', (e) => {
+    const cb = e.target.closest('[data-fk]');
+    if (!cb || cb.dataset.fk === LOCKED) return;
+    const k = cb.dataset.fk;
+    const hidden = state.hidden[state.kind];
+    const i = hidden.indexOf(k);
+    if (cb.checked) { if (i >= 0) hidden.splice(i, 1); }
+    else if (i < 0) hidden.push(k);
+    saveCols();
+    cb.closest('.fp-item').classList.toggle('off', !cb.checked);
+    refreshTable();
+  });
+
+  const fpItems = () => $('fieldPop').querySelectorAll('.fp-item');
+
+  $('fieldPop').addEventListener('dragstart', (e) => {
+    const li = e.target.closest('.fp-item');
+    if (!li || li.classList.contains('locked')) { e.preventDefault(); return; }
+    dragKey = li.dataset.k;
+    li.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', dragKey); } catch (_) {}
+  });
+
+  $('fieldPop').addEventListener('dragover', (e) => {
+    if (!dragKey) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    fpItems().forEach((n) => n.classList.remove('over'));
+    const li = e.target.closest('.fp-item');
+    if (li && li.dataset.k !== dragKey && !li.classList.contains('locked')) li.classList.add('over');
+  });
+
+  $('fieldPop').addEventListener('drop', (e) => {
+    if (!dragKey) return;
+    e.preventDefault();
+    const li = e.target.closest('.fp-item');
+    if (!li || li.classList.contains('locked') || li.dataset.k === dragKey) return;
+
+    const kind = state.kind;
+    const order = state.cols[kind].slice();
+    const from = order.indexOf(dragKey);
+    const to = order.indexOf(li.dataset.k);
+    if (from < 0 || to < 0) return;
+    order.splice(from, 1);
+    order.splice(to, 0, dragKey);
+
+    state.cols[kind] = order;
+    saveCols();
+    dragKey = null;
+    renderFields();
+    refreshTable();
+  });
+
+  $('fieldPop').addEventListener('dragend', () => {
+    dragKey = null;
+    fpItems().forEach((n) => n.classList.remove('dragging', 'over'));
+  });
+
+  // 点击面板外关闭
+  document.addEventListener('click', (e) => {
+    if ($('fieldPop').hidden) return;
+    if (e.target.closest('#fieldPop') || e.target.closest('#fieldsBtn')) return;
+    toggleFields(false);
+  });
 
   /* ── 对比视图 ───────────────────────────────────────────── */
 
@@ -523,6 +754,7 @@
     renderSeg();
     renderTray();
     renderFilters();
+    if (!$('fieldPop').hidden) renderFields(); else updateFieldsCount();
   }
 
   /* ── 交互 ───────────────────────────────────────────────── */
@@ -740,7 +972,8 @@
   // 键盘
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      if (!$('overlay').hidden) closeCompare();
+      if (!$('fieldPop').hidden) toggleFields(false);
+      else if (!$('overlay').hidden) closeCompare();
       else if (document.activeElement && document.activeElement.tagName === 'INPUT') document.activeElement.blur();
       return;
     }
@@ -764,6 +997,7 @@
       setTheme((() => { try { return localStorage.getItem('hwdata-theme'); } catch (_) { return null; } })()
         || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
       prepare();
+      loadCols();
       renderAll();
       requestAnimationFrame(() => { renderSeg(); bootEl.hidden = true; });
     } catch (err) {

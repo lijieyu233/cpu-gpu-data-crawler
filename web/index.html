@@ -57,6 +57,10 @@
       </div>
       <div class="chips" id="activeChips"></div>
       <div class="toolbar-right">
+        <button class="btn ghost sm" id="fieldsBtn" aria-expanded="false" title="选择显示字段，拖拽调整顺序">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5.5h14M3 10h14M3 14.5h9"/></svg>
+          字段<i class="fcount" id="fieldsCount"></i>
+        </button>
         <label class="pagesize">
           每页
           <select id="pageSize">
@@ -68,6 +72,7 @@
           </select>
           条
         </label>
+        <div class="fieldpop" id="fieldPop" hidden></div>
       </div>
     </div>
 
