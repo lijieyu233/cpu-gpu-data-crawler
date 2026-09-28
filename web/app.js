@@ -63,6 +63,12 @@
     gpu: {
       primary: 'passmark_g3d_mark',
       base: { model: 'GeForce RTX 5060', t: 'vs RTX 5060' },
+      // 默认只展示常用几列，其余在「字段」面板里开启
+      dftHidden: [
+        'brand', 'chip', 'memory_type', 'bus_width_bit', 'bus_interface',
+        'core_clock_ghz', 'memory_clock_ghz', 'shaders', 'tmus', 'rops',
+        'released_date', 'fp32_tflops', 'texel_rate', 'pixel_rate',
+      ],
       columns: [
         { k: 'model', t: '型号', type: 'name', sticky: true, w: '238px' },
         { k: 'brand', t: '品牌', type: 'brand', w: '84px' },
@@ -177,6 +183,7 @@
     filters: { cpu: {}, gpu: {} },
     cols: { cpu: [], gpu: [] },     // 字段顺序（含被隐藏的）
     hidden: { cpu: [], gpu: [] },   // 被隐藏的字段
+    widths: { cpu: {}, gpu: {} },   // 自定义列宽（px）
   };
 
   for (const kind of KINDS) {
@@ -189,11 +196,27 @@
 
   /* ── 字段顺序 / 显隐（持久化到 localStorage） ───────────── */
 
-  const LS_COLS = 'hwdata-cols-v1';
+  const LS_COLS = 'hwdata-cols-v2';
   const LOCKED = 'model';   // 型号列固定在最左，不可隐藏、不可拖动
+  const MINW = 52;          // 列宽下限
 
   function defaultCols(kind) {
     return CFG[kind].columns.map((d) => d.k);
+  }
+
+  function defaultHidden(kind) {
+    return (CFG[kind].dftHidden || []).slice();
+  }
+
+  function defWidth(kind, k) {
+    const c = CFG[kind].columns.find((d) => d.k === k);
+    const n = c && c.w ? parseInt(c.w, 10) : NaN;
+    return Number.isFinite(n) ? n : 120;
+  }
+
+  function widthOf(kind, k) {
+    const v = state.widths[kind][k];
+    return Number.isFinite(v) && v >= MINW ? v : defWidth(kind, k);
   }
 
   function loadCols() {
@@ -202,7 +225,7 @@
     for (const kind of KINDS) {
       const all = defaultCols(kind);
       let order = all.slice();
-      let hidden = [];
+      let hidden = defaultHidden(kind);
       const s = saved && saved[kind];
       if (s) {
         if (Array.isArray(s.order)) {
@@ -214,14 +237,23 @@
       }
       state.cols[kind] = order;
       state.hidden[kind] = hidden;
+
+      const w = {};
+      if (s && s.widths && typeof s.widths === 'object') {
+        for (const k of all) {
+          const v = Number(s.widths[k]);
+          if (Number.isFinite(v) && v >= MINW) w[k] = Math.round(v);
+        }
+      }
+      state.widths[kind] = w;
     }
   }
 
   function saveCols() {
     try {
       localStorage.setItem(LS_COLS, JSON.stringify({
-        cpu: { order: state.cols.cpu, hidden: state.hidden.cpu },
-        gpu: { order: state.cols.gpu, hidden: state.hidden.gpu },
+        cpu: { order: state.cols.cpu, hidden: state.hidden.cpu, widths: state.widths.cpu },
+        gpu: { order: state.cols.gpu, hidden: state.hidden.gpu, widths: state.widths.gpu },
       }));
     } catch (_) { /* 隐私模式下忽略 */ }
   }
@@ -450,6 +482,27 @@
 
   /* ── 渲染：表头 / 表体 / 分页 ───────────────────────────── */
 
+  /* 列宽：<colgroup> 定宽，末尾加一列填充列吸收剩余宽度，保证表格铺满容器 */
+  function applyWidths() {
+    const kind = state.kind;
+    const g = $('colgroup');
+    const table = $('grid');
+    const wrap = $('tablewrap');
+    if (!g || !table) return;
+
+    let sum = 0;
+    const cols = colsOf(kind).map((c) => {
+      const w = widthOf(kind, c.k);
+      sum += w;
+      return `<col style="width:${w}px">`;
+    });
+    cols.push('<col>');
+    g.innerHTML = cols.join('');
+
+    const avail = wrap ? wrap.clientWidth : 0;
+    table.style.width = Math.max(sum, avail) + 'px';
+  }
+
   function renderHead() {
     const kind = state.kind;
     const sort = state.sort[kind];
@@ -461,9 +514,11 @@
       const title = c.type === 'vs' && ref
         ? `以 ${CFG[kind].base.model}（${nf.format(ref)}）跑分为 100% · 点击排序`
         : '点击排序';
-      return `<th class="${cls}" data-k="${c.k}" style="min-width:${c.w}" title="${esc(title)}">
-        ${esc(c.t)}${c.u ? `<span class="u">${c.u}</span>` : ''}<span class="caret"></span></th>`;
-    }).join('') + '</tr>';
+      return `<th class="${cls}" data-k="${c.k}" draggable="${c.sticky ? 'false' : 'true'}" title="${esc(title)}">
+        ${esc(c.t)}${c.u ? `<span class="u">${c.u}</span>` : ''}<span class="caret"></span>` +
+        `<span class="colres" draggable="false" title="拖动调整列宽"></span></th>`;
+    }).join('') + '<th class="filler" aria-hidden="true"></th></tr>';
+    applyWidths();
   }
 
   function renderBody(list) {
@@ -485,7 +540,7 @@
           </div></td>`;
         }
         return `<td class="${c.num ? 'num' : ''}">${fmtCell(val, c.type)}</td>`;
-      }).join('');
+      }).join('') + '<td class="filler"></td>';
       return `<tr data-id="${r.__id}" class="${sel.indexOf(r.__id) >= 0 ? 'sel' : ''}">${tds}</tr>`;
     }).join('');
 
@@ -611,7 +666,8 @@
   function resetFields() {
     const kind = state.kind;
     state.cols[kind] = defaultCols(kind);
-    state.hidden[kind] = [];
+    state.hidden[kind] = defaultHidden(kind);
+    state.widths[kind] = {};
     saveCols();
     renderFields();
     refreshTable();
@@ -813,6 +869,7 @@
 
   // 表头排序
   $('thead').addEventListener('click', (e) => {
+    if (e.target.closest('.colres') || colDragging) return;   // 调宽 / 拖动排序时不触发排序
     const th = e.target.closest('th[data-k]');
     if (!th) return;
     const k = th.dataset.k;
@@ -822,6 +879,94 @@
     state.page[state.kind] = 1;
     renderAll();
   });
+
+  // 表头拖动排序
+  let dragCol = null;
+  let colDragging = false;
+
+  function moveColumn(from, to) {
+    const kind = state.kind;
+    const order = state.cols[kind].slice();
+    const i = order.indexOf(from);
+    const j = order.indexOf(to);
+    if (i < 0 || j < 0 || i === j) return;
+    order.splice(i, 1);
+    order.splice(j, 0, from);
+    state.cols[kind] = order;
+    saveCols();
+    refreshTable();
+  }
+
+  const headThs = (sel) => $('thead').querySelectorAll(sel || 'th[data-k]');
+
+  on($('thead'), 'dragstart', (e) => {
+    const th = e.target.closest('th[data-k]');
+    if (resizing || !th || th.classList.contains('sticky') || e.target.closest('.colres')) {
+      e.preventDefault();
+      return;
+    }
+    dragCol = th.dataset.k;
+    colDragging = true;
+    th.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', dragCol); } catch (_) {}
+  });
+
+  on($('thead'), 'dragover', (e) => {
+    if (!dragCol) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    headThs().forEach((n) => n.classList.remove('over'));
+    const th = e.target.closest('th[data-k]');
+    if (th && !th.classList.contains('sticky') && th.dataset.k !== dragCol) th.classList.add('over');
+  });
+
+  on($('thead'), 'drop', (e) => {
+    if (!dragCol) return;
+    e.preventDefault();
+    const th = e.target.closest('th[data-k]');
+    if (th && !th.classList.contains('sticky')) moveColumn(dragCol, th.dataset.k);
+    dragCol = null;
+  });
+
+  on($('thead'), 'dragend', () => {
+    dragCol = null;
+    headThs('th').forEach((n) => n.classList.remove('dragging', 'over'));
+    setTimeout(() => { colDragging = false; }, 0);
+  });
+
+  // 拖动表头右边缘调整列宽
+  let resizing = null;
+
+  on($('thead'), 'mousedown', (e) => {
+    const h = e.target.closest('.colres');
+    if (!h || e.button !== 0) return;
+    const th = h.closest('th[data-k]');
+    if (!th) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const w0 = th.getBoundingClientRect().width;
+    resizing = { kind: state.kind, k: th.dataset.k, x: e.clientX, w0, w: Math.round(w0) };
+    document.body.classList.add('col-resizing');
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!resizing) return;
+    const w = Math.max(MINW, Math.round(resizing.w0 + (e.clientX - resizing.x)));
+    if (w === resizing.w) return;
+    resizing.w = w;
+    state.widths[resizing.kind][resizing.k] = w;
+    applyWidths();
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!resizing) return;
+    document.body.classList.remove('col-resizing');
+    resizing = null;
+    saveCols();
+  });
+
+  window.addEventListener('resize', () => { applyWidths(); });
 
   // 行选择
   $('tbody').addEventListener('click', (e) => {

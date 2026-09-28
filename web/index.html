@@ -57,7 +57,7 @@
       </div>
       <div class="chips" id="activeChips"></div>
       <div class="toolbar-right">
-        <button class="btn ghost sm" id="fieldsBtn" aria-expanded="false" title="选择显示字段，拖拽调整顺序">
+        <button class="btn ghost sm" id="fieldsBtn" aria-expanded="false" title="选择显示字段（可拖拽排序）；表头也可拖动排序、拖边缘调宽">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5.5h14M3 10h14M3 14.5h9"/></svg>
           字段<i class="fcount" id="fieldsCount"></i>
         </button>
@@ -78,6 +78,7 @@
 
     <div class="tablewrap" id="tablewrap">
       <table class="grid" id="grid">
+        <colgroup id="colgroup"></colgroup>
         <thead id="thead"></thead>
         <tbody id="tbody"></tbody>
       </table>
