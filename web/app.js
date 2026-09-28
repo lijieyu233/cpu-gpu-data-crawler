@@ -77,6 +77,9 @@
         { k: 'tmus', t: 'TMU', type: 'int', num: true, w: '68px' },
         { k: 'rops', t: 'ROP', type: 'int', num: true, w: '68px' },
         { k: 'released_date', d: 'released', t: '发布', type: 'text', w: '110px' },
+        { k: 'fp32_tflops', t: 'FP32 算力', u: 'TFLOPS', type: 'dec1', num: true, w: '106px' },
+        { k: 'texel_rate', t: '纹理填充率', u: 'GTexel/s', type: 'dec1', num: true, w: '118px' },
+        { k: 'pixel_rate', t: '像素填充率', u: 'GPixel/s', type: 'dec1', num: true, w: '118px' },
         { k: 'passmark_g3d_mark', t: 'G3D Mark', type: 'mark', num: true, w: '118px' },
         { k: 'vs_ratio', t: 'vs RTX 5060', type: 'vs', num: true, w: '106px' },
         { k: 'passmark_rank', t: '排名', type: 'rank', num: true, w: '68px' },
@@ -104,6 +107,9 @@
         { k: 'shaders', t: '着色器单元', better: 'high' },
         { k: 'tmus', t: 'TMU', better: 'high' },
         { k: 'rops', t: 'ROP', better: 'high' },
+        { k: 'fp32_tflops', t: 'FP32 算力', u: 'TFLOPS', dec: 1, better: 'high' },
+        { k: 'texel_rate', t: '纹理填充率', u: 'GTexel/s', dec: 1, better: 'high' },
+        { k: 'pixel_rate', t: '像素填充率', u: 'GPixel/s', dec: 1, better: 'high' },
         { k: 'released', t: '发布时间' },
         { k: 'passmark_g3d_mark', t: 'PassMark G3D', int: true, better: 'high' },
         { k: 'passmark_rank', t: '全球排名', better: 'low' },
@@ -129,6 +135,14 @@
         const y = /^(\d{4})/.exec(r.released_date || '');
         r.year = y ? Number(y[1]) : null;
         r.haspm = r[mark] != null;
+        // 派生指标：以加速频率换算的峰值算力 / 填充率（仅显卡）
+        if (kind === 'gpu') {
+          const clk = Number(r.core_clock_ghz);
+          const ok = Number.isFinite(clk) && clk > 0;
+          r.fp32_tflops = ok && r.shaders ? (Number(r.shaders) * 2 * clk) / 1000 : null;
+          r.texel_rate = ok && r.tmus ? Number(r.tmus) * clk : null;
+          r.pixel_rate = ok && r.rops ? Number(r.rops) * clk : null;
+        }
         return r;
       });
 
@@ -262,6 +276,7 @@
       case 'mark': return markCell(Number(v));
       case 'rank': return `<span class="rank${Number(v) <= 100 ? ' top' : ''}">#${nf.format(v)}</span>`;
       case 'dec': return String(Math.round(Number(v) * 1000) / 1000);
+      case 'dec1': return String(Math.round(Number(v) * 10) / 10);
       case 'usd': return '$' + nf.format(Math.round(Number(v)));
       case 'vs': {
         const n = Number(v);
