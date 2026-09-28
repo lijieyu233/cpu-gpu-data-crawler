@@ -57,6 +57,16 @@ python web/build_data.py      # 把 out/*.json 精简后转成 web/data/*.js
 
 浏览器打开 `file://` 时无法 fetch 本地 JSON，所以这里把数据打包成可直接 `<script>` 加载的 JS 文件。生成后直接双击 `web/index.html` 即可使用；数据更新后重新执行一次即可。
 
+### 在线版
+
+部署在腾讯云服务器：<http://134.175.67.86:8090/>（`nginx:alpine` 容器，容器名 `hwdata`，配置见 `deploy/`）。
+
+```bash
+# 首次部署 / 更新页面
+scp -i ~/.ssh/id_ed25519 web/index.html web/style.css web/app.js ubuntu@134.175.67.86:/data/docker/hwdata/html/
+scp -i ~/.ssh/id_ed25519 web/data/*.js ubuntu@134.175.67.86:/data/docker/hwdata/html/data/
+```
+
 ## 结构
 
 ```
