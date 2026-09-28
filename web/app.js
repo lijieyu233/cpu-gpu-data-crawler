@@ -24,7 +24,7 @@
         { k: 'process_nm', t: '制程', u: 'nm', type: 'int', num: true, w: '72px' },
         { k: 'l3_cache_mb', t: 'L3', u: 'MB', type: 'int', num: true, w: '76px' },
         { k: 'tdp_w', t: 'TDP', u: 'W', type: 'int', num: true, w: '68px' },
-        { k: 'released_date', d: 'released', t: '发布', type: 'text', w: '110px' },
+        { k: 'released_date', d: 'released', t: '发布', type: 'date', w: '118px' },
         { k: 'passmark_cpu_mark', t: 'PassMark', type: 'mark', num: true, w: '118px' },
         { k: 'vs_ratio', t: 'vs 5600', type: 'vs', num: true, w: '84px' },
         { k: 'passmark_single_thread', t: '单线程', type: 'mark', num: true, w: '94px' },
@@ -52,7 +52,7 @@
         { k: 'process_nm', t: '制程', u: 'nm', better: 'low' },
         { k: 'l3_cache_mb', t: 'L3 缓存', u: 'MB', better: 'high' },
         { k: 'tdp_w', t: 'TDP', u: 'W' },
-        { k: 'released', t: '发布时间' },
+        { k: 'released', t: '发布时间', date: true },
         { k: 'passmark_cpu_mark', t: 'PassMark 多线程', int: true, better: 'high' },
         { k: 'passmark_single_thread', t: 'PassMark 单线程', int: true, better: 'high' },
         { k: 'passmark_rank', t: '全球排名', better: 'low' },
@@ -82,7 +82,7 @@
         { k: 'shaders', t: '着色器', type: 'int', num: true, w: '86px' },
         { k: 'tmus', t: 'TMU', type: 'int', num: true, w: '68px' },
         { k: 'rops', t: 'ROP', type: 'int', num: true, w: '68px' },
-        { k: 'released_date', d: 'released', t: '发布', type: 'text', w: '110px' },
+        { k: 'released_date', d: 'released', t: '发布', type: 'date', w: '118px' },
         { k: 'fp32_tflops', t: 'FP32 算力', u: 'TFLOPS', type: 'dec1', num: true, w: '106px' },
         { k: 'texel_rate', t: '纹理填充率', u: 'GTexel/s', type: 'dec1', num: true, w: '118px' },
         { k: 'pixel_rate', t: '像素填充率', u: 'GPixel/s', type: 'dec1', num: true, w: '118px' },
@@ -116,7 +116,7 @@
         { k: 'fp32_tflops', t: 'FP32 算力', u: 'TFLOPS', dec: 1, better: 'high' },
         { k: 'texel_rate', t: '纹理填充率', u: 'GTexel/s', dec: 1, better: 'high' },
         { k: 'pixel_rate', t: '像素填充率', u: 'GPixel/s', dec: 1, better: 'high' },
-        { k: 'released', t: '发布时间' },
+        { k: 'released', t: '发布时间', date: true },
         { k: 'passmark_g3d_mark', t: 'PassMark G3D', int: true, better: 'high' },
         { k: 'passmark_rank', t: '全球排名', better: 'low' },
         { k: 'passmark_value', t: '性价比', dec: 2, better: 'high' },
@@ -300,10 +300,26 @@
     return `<span class="tag" style="--bc:${brandColor(brand)}">${esc(brand)}</span>`;
   }
 
+  /* 发布时间中文化：源数据是 "Mar 6th, 2025" / "Apr 2022" / "2015" 三种精度 */
+  const MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+  function cnDate(s) {
+    const t = String(s).trim();
+    let m = /^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$/.exec(t);
+    if (m) { const mo = MON[m[1].toLowerCase()]; if (mo) return `${m[3]}年${mo}月${Number(m[2])}日`; }
+    m = /^([A-Za-z]{3})[a-z]*\.?\s+(\d{4})$/.exec(t);
+    if (m) { const mo = MON[m[1].toLowerCase()]; if (mo) return `${m[2]}年${mo}月`; }
+    m = /^(\d{4})$/.exec(t);
+    if (m) return `${m[1]}年`;
+    if (/^(never\s+released|unreleased)$/i.test(t)) return '未发布';
+    if (/^unknown$/i.test(t)) return '';
+    return t;
+  }
+
   function fmtCell(v, type) {
     if (v === null || v === undefined || v === '') return '<span class="na">—</span>';
     switch (type) {
       case 'brand': return brandTag(v);
+      case 'date': { const s = cnDate(v); return s ? esc(s) : '<span class="na">—</span>'; }
       case 'int': return nf.format(v);
       case 'mark': return markCell(Number(v));
       case 'rank': return `<span class="rank${Number(v) <= 100 ? ' top' : ''}">#${nf.format(v)}</span>`;
@@ -757,6 +773,7 @@
     const v = row[def.k];
     if (v === null || v === undefined || v === '') return null;
     if (def.k === 'brand') return v;
+    if (def.date) return cnDate(v) || null;
     if (def.usd) return '$' + nf.format(Math.round(Number(v)));
     if (def.int) return nf.format(Number(v));
     if (def.dec != null) return (Number(v)).toFixed(def.dec).replace(/\.?0+$/, '') || '0';
